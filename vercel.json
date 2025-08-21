@@ -1,0 +1,25 @@
+{
+  "functions": {
+    "api/index.go": {
+      "runtime": "go1.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/health",
+      "dest": "/api/index.go"
+    },
+    {
+      "src": "/attendance",
+      "dest": "/api/index.go"
+    },
+    {
+      "src": "/timetable", 
+      "dest": "/api/index.go"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.go"
+    }
+  ]
+}
