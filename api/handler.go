@@ -17,7 +17,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// --- Data Structures (No changes needed here) ---
+// --- Data Structures ---
 
 type AttendanceResponse struct {
 	StudentID         string   `json:"student_id"`
@@ -31,7 +31,6 @@ type AttendanceResponse struct {
 	Error             string   `json:"error,omitempty"`
 }
 
-// ... (All your other structs like TimeSlot, PeriodDetail, etc. remain the same)
 type TimeSlot struct {
 	Period    string `json:"period"`
 	StartTime string `json:"start_time"`
@@ -62,7 +61,8 @@ type TimetableResponse struct {
 	Error     string        `json:"error,omitempty"`
 }
 
-// --- All your helper and core logic functions (pkcs7Pad, encryptPasswordAES, authenticateUser, FetchAttendanceAPI, etc.) remain exactly the same ---
+// --- Helper & Core Logic Functions ---
+
 func pkcs7Pad(data []byte, blockSize int) []byte {
 	padLen := blockSize - len(data)%blockSize
 	padding := bytes.Repeat([]byte{byte(padLen)}, padLen)
@@ -73,16 +73,13 @@ func encryptPasswordAES(plainText string) (string, error) {
 	key := []byte("8701661282118308")
 	iv := []byte("8701661282118308")
 	plaintextBytes := pkcs7Pad([]byte(plainText), aes.BlockSize)
-
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", err
 	}
-
 	cipherText := make([]byte, len(plaintextBytes))
 	mode := cipher.NewCBCEncrypter(block, iv)
 	mode.CryptBlocks(cipherText, plaintextBytes)
-
 	return base64.StdEncoding.EncodeToString(cipherText), nil
 }
 
@@ -91,14 +88,11 @@ func extractHiddenFields(body []byte) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-
 	viewState, exists1 := doc.Find("input[name='__VIEWSTATE']").Attr("value")
 	eventValidation, exists2 := doc.Find("input[name='__EVENTVALIDATION']").Attr("value")
-
 	if !exists1 || !exists2 {
 		return "", "", fmt.Errorf("missing viewstate or eventvalidation")
 	}
-
 	return viewState, eventValidation, nil
 }
 
@@ -146,20 +140,14 @@ func getCurrentDate() string {
 func parseTimeSlot(headerText string) TimeSlot {
 	headerText = strings.ReplaceAll(headerText, "<br/>", "\n")
 	headerText = strings.ReplaceAll(headerText, "<br>", "\n")
-
 	lines := strings.Split(headerText, "\n")
 	if len(lines) < 3 {
 		return TimeSlot{}
 	}
-
-	period := strings.TrimSpace(lines[0])
-	startTime := strings.TrimSpace(lines[1])
-	endTime := strings.TrimSpace(lines[2])
-
 	return TimeSlot{
-		Period:    period,
-		StartTime: startTime,
-		EndTime:   endTime,
+		Period:    strings.TrimSpace(lines[0]),
+		StartTime: strings.TrimSpace(lines[1]),
+		EndTime:   strings.TrimSpace(lines[2]),
 	}
 }
 
@@ -176,26 +164,21 @@ func authenticateUser(username, password string) (*http.Client, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	jar, _ := cookiejar.New(nil)
 	client.Jar = jar
-
 	loginURL := "https://webprosindia.com/vignanit/Default.aspx"
-
 	resp, err := client.Get(loginURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get login page: %v", err)
 	}
 	defer resp.Body.Close()
 	bodyBytes, _ := io.ReadAll(resp.Body)
-
 	viewState, eventValidation, err := extractHiddenFields(bodyBytes)
 	if err != nil {
 		return nil, err
 	}
-
 	encryptedPassword, err := encryptPasswordAES(password)
 	if err != nil {
 		return nil, err
 	}
-
 	data := url.Values{}
 	data.Set("__VIEWSTATE", viewState)
 	data.Set("__EVENTVALIDATION", eventValidation)
@@ -203,34 +186,27 @@ func authenticateUser(username, password string) (*http.Client, error) {
 	data.Set("hdnpwd2", encryptedPassword)
 	data.Set("imgBtn2.x", "25")
 	data.Set("imgBtn2.y", "10")
-
 	req, _ := http.NewRequest("POST", loginURL, strings.NewReader(data.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", "Mozilla/5.0")
-
 	resp2, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp2.Body.Close()
 	loginBodyBytes, _ := io.ReadAll(resp2.Body)
-
 	if strings.Contains(string(loginBodyBytes), "Invalid Username") {
 		return nil, fmt.Errorf("invalid login")
 	}
-
 	return client, nil
 }
 
 func FetchAttendanceAPI(username, password string) AttendanceResponse {
-	// ... (Your existing FetchAttendanceAPI code)
 	client, err := authenticateUser(username, password)
 	if err != nil {
 		return AttendanceResponse{Error: err.Error()}
 	}
-
 	attendanceURL := "https://webprosindia.com/vignanit/Academics/studentacadamicregister.aspx?scrid=2"
-
 	resp3, err := client.Get(attendanceURL)
 	if err != nil {
 		return AttendanceResponse{Error: err.Error()}
@@ -240,12 +216,10 @@ func FetchAttendanceAPI(username, password string) AttendanceResponse {
 	if err != nil {
 		return AttendanceResponse{Error: err.Error()}
 	}
-
 	today := getCurrentDate()
 	totalPresent, totalClasses := 0, 0
 	todaysAttendance := []string{}
 	subjectAttendance := []string{}
-
 	headerRow := doc.Find("tr.reportHeading2WithBackground")
 	headers := []string{}
 	headerRow.Find("td").Each(func(i int, s *goquery.Selection) {
@@ -258,7 +232,6 @@ func FetchAttendanceAPI(username, password string) AttendanceResponse {
 			break
 		}
 	}
-
 	doc.Find("tr[title]").Each(func(i int, s *goquery.Selection) {
 		cells := s.Find("td.cellBorder")
 		if cells.Length() < 2 {
@@ -267,14 +240,12 @@ func FetchAttendanceAPI(username, password string) AttendanceResponse {
 		subject := strings.TrimSpace(cells.Eq(1).Text())
 		attendance := strings.TrimSpace(cells.Eq(cells.Length() - 2).Text())
 		percent := strings.TrimSpace(cells.Eq(cells.Length() - 1).Text())
-
 		var present, total int
 		if strings.Contains(attendance, "/") {
 			fmt.Sscanf(attendance, "%d/%d", &present, &total)
 		}
 		totalPresent += present
 		totalClasses += total
-
 		if todayIndex != -1 && todayIndex < cells.Length() {
 			todayText := strings.TrimSpace(cells.Eq(todayIndex).Text())
 			statuses := []string{}
@@ -289,15 +260,12 @@ func FetchAttendanceAPI(username, password string) AttendanceResponse {
 		}
 		subjectAttendance = append(subjectAttendance, fmt.Sprintf("%-20s %7s %s", subject, attendance, percent))
 	})
-
 	overallPercentage := 0.0
 	if totalClasses > 0 {
 		overallPercentage = float64(totalPresent) / float64(totalClasses) * 100
 	}
-
 	skippable := calculateSkippableHours(totalPresent, totalClasses)
 	required := calculateRequiredHours(totalPresent, totalClasses)
-
 	return AttendanceResponse{
 		StudentID:         username,
 		TotalPresent:      totalPresent,
@@ -311,32 +279,26 @@ func FetchAttendanceAPI(username, password string) AttendanceResponse {
 }
 
 func FetchTimetableAPI(username, password string) TimetableResponse {
-	// ... (Your existing FetchTimetableAPI code)
 	client, err := authenticateUser(username, password)
 	if err != nil {
 		return TimetableResponse{Error: err.Error()}
 	}
-
 	ajaxURL := "https://webprosindia.com/vignanit/ajax/Academics_TimeTableReport,App_Web_timetablereport.aspx.a2a1b31c.ashx?_method=getTimeTableReport&_session=r"
-
 	req, err := http.NewRequest("GET", ajaxURL, nil)
 	if err != nil {
 		return TimetableResponse{Error: fmt.Sprintf("request error: %v", err)}
 	}
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	req.Header.Set("User-Agent", "Mozilla/5.0")
-
 	resp, err := client.Do(req)
 	if err != nil {
 		return TimetableResponse{Error: fmt.Sprintf("request failed: %v", err)}
 	}
 	defer resp.Body.Close()
-
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return TimetableResponse{Error: fmt.Sprintf("failed to read response: %v", err)}
 	}
-
 	rawStr := string(bodyBytes)
 	start := strings.Index(rawStr, "'")
 	end := strings.LastIndex(rawStr, "'")
@@ -344,25 +306,19 @@ func FetchTimetableAPI(username, password string) TimetableResponse {
 		return TimetableResponse{Error: "No valid HTML found in AJAX response"}
 	}
 	htmlStr := rawStr[start+1 : end]
-
 	if htmlStr == "" {
 		return TimetableResponse{Error: "empty HTML content in AJAX response"}
 	}
-
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
 		return TimetableResponse{Error: fmt.Sprintf("failed to parse HTML: %v", err)}
 	}
-
 	schedule := []DaySchedule{}
 	subjects := []Subject{}
-
 	tables := doc.Find("table")
-
 	if tables.Length() < 2 {
 		return TimetableResponse{Error: "expected timetable and subject tables not found"}
 	}
-
 	var subjectTable *goquery.Selection
 	tables.Each(func(i int, table *goquery.Selection) {
 		headerRow := table.Find("tr").First()
@@ -370,7 +326,6 @@ func FetchTimetableAPI(username, password string) TimetableResponse {
 			subjectTable = table
 		}
 	})
-
 	if subjectTable != nil {
 		subjectTable.Find("tr").Each(func(i int, row *goquery.Selection) {
 			if i == 0 {
@@ -387,7 +342,6 @@ func FetchTimetableAPI(username, password string) TimetableResponse {
 			}
 		})
 	}
-
 	var timetableTable *goquery.Selection
 	tables.Each(func(i int, table *goquery.Selection) {
 		headerRow := table.Find("tr").First()
@@ -395,11 +349,9 @@ func FetchTimetableAPI(username, password string) TimetableResponse {
 			timetableTable = table
 		}
 	})
-
 	if timetableTable == nil {
 		return TimetableResponse{Error: "timetable not found"}
 	}
-
 	headerCells := timetableTable.Find("tr").First().Find("td")
 	var timeSlots []TimeSlot
 	headerCells.Each(func(i int, cell *goquery.Selection) {
@@ -410,7 +362,6 @@ func FetchTimetableAPI(username, password string) TimetableResponse {
 		timeSlot := parseTimeSlot(cellHTML)
 		timeSlots = append(timeSlots, timeSlot)
 	})
-
 	timetableTable.Find("tr").Each(func(i int, row *goquery.Selection) {
 		if i == 0 {
 			return
@@ -419,10 +370,8 @@ func FetchTimetableAPI(username, password string) TimetableResponse {
 		if cells.Length() < 2 {
 			return
 		}
-
 		day := strings.TrimSpace(cells.First().Text())
 		periods := []PeriodDetail{}
-
 		for j := 1; j < cells.Length(); j++ {
 			timeSlotIdx := j - 1
 			if timeSlotIdx >= len(timeSlots) {
@@ -440,7 +389,6 @@ func FetchTimetableAPI(username, password string) TimetableResponse {
 			}
 			periods = append(periods, period)
 		}
-
 		if day != "" && len(periods) > 0 {
 			schedule = append(schedule, DaySchedule{
 				Day:     day,
@@ -448,7 +396,6 @@ func FetchTimetableAPI(username, password string) TimetableResponse {
 			})
 		}
 	})
-
 	return TimetableResponse{
 		StudentID: username,
 		Schedule:  schedule,
@@ -456,20 +403,15 @@ func FetchTimetableAPI(username, password string) TimetableResponse {
 	}
 }
 
-// --- NEW VERCEL HANDLER ---
-// This function replaces the main() function and acts as the entry point for Vercel.
+// --- VERCEL HANDLER ---
 func Handler(w http.ResponseWriter, r *http.Request) {
-	// Enable CORS for all responses
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-
-	// Route requests based on the URL path
 	switch r.URL.Path {
 	case "/attendance":
 		attendanceHandler(w, r)
@@ -482,8 +424,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// --- HTTP Handlers (These are now called by the main Vercel Handler) ---
-
+// --- HTTP Handlers ---
 func attendanceHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
